@@ -3,9 +3,14 @@ import './App.css';
 import axios from 'axios';
 import 'bootstrap/dist/css/bootstrap.min.css'
 import * as bootstrap from 'bootstrap';
+import LoginForm from "./LoginForm";
+import Products from "./Products";
 
 const API_BASE = "https://ec-course-api.hexschool.io/v2";
 const API_PATH = "jiaobin"; 
+
+// ### 登入資訊
+// 1. token 儲存 + 登入驗證 ( 同時 getProduct() ) => OK
 
 // ### Modal
 // 1. 建立 tempProduct state
@@ -18,15 +23,8 @@ const API_PATH = "jiaobin";
 // 3. 啟用/關閉顏色 
 
 function App() {
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-  });
-  const [isAuth, setisAuth] = useState(false);
-  
-
-  // 1. 建立 tempProduct state
-   const defaultProduct = {
+  // 初始化商品
+  const defaultProduct = {
     title: '',
     category: '',
     unit: '',
@@ -38,57 +36,97 @@ function App() {
     imageUrl: '',
     imagesUrl: [],
   };
+
+  // useState
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+  });
+  const [products, setProducts] = useState([]);
+  const [isAuth, setisAuth] = useState(false);
   const [tempProduct, setTempProduct] =  useState(defaultProduct);
-  // 初始化 product
+
+  // useRef
   const productModalRef = useRef(null);
   
+  // 頁面初始化功能
+  // 取得商品列表
+  async function getProducts(){
 
-  // 使用者登入
+      const res = await axios.get(`${API_BASE}/api/${API_PATH}/admin/products`);
+      const productList = res.data.products;
+      setProducts(productList);
 
+      return productList
+  }
+
+  // 登入
+  async function handleLogin(e){
+     e.preventDefault();
+    try
+    {
+      const res = await axios.post( `${API_BASE}/admin/signin`, formData);
+      const {token, expired} = res.data;
+      document.cookie = `hexToken=${token};expires=${new Date(expired)};`;
+      axios.defaults.headers.common.Authorization = `${token}`;
+
+      setisAuth(true); // 修改驗證狀態為 登入成功
+      getProducts();   // 重新渲染列表
+        
+    }
+    catch(err)
+    {
+      console.dir(err);
+      setisAuth(false); // 修改驗證狀態為 登入失敗
+    }
+    finally{
+      console.log('登入function執行完畢')
+    }
+  }
+
+  // useEffect
   useEffect(() => {
     const token = document.cookie.replace(
       /(?:(?:^|.*;\s*)hexToken\s*=\s*([^;]*).*$)|^.*$/,
       "$1"
     );
-    axios.defaults.headers.common.Authorization = token;
+
+    if(token){
+      axios.defaults.headers.common.Authorization = token;
+    }else{
+      console.log('未取得token');
+    }
+    
     productModalRef.current = new bootstrap.Modal('#productModal', {
       keyboard: false
     });
+
+    const checkAdmin = async () => {
+      try {
+        await axios.post(`${API_BASE}/api/user/check`);
+        setisAuth(true);
+        getProducts();
+      } catch (err) {
+        console.log(err.response.data.message);
+      }
+    };
+
     checkAdmin();
     
   }, []);
 
-  const checkAdmin = async () => {
-    try {
-      await axios.post(`${API_BASE}/api/user/check`);
-      setisAuth(true);
-    } catch (err) {
-      console.log(err.response.data.message);
-    }
-  };
-
+  
+  // input狀態改變共用方法
   const handleInputChange = (e) => {
-    const { id, value } = e.target;
+    const { name, value } = e.target;
     setFormData((prevData) => ({
       ...prevData,
-      [id]: value,
+      [name]: value,
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post(`${API_BASE}/admin/signin`, formData);
-      const { token, expired } = response.data;
-      document.cookie = `hexToken=${token};expires=${new Date(expired)};`;
-      axios.defaults.headers.common.Authorization = token;
-      setisAuth(true);
-    } catch (error) {
-      alert("登入失敗: " + error.response.data.message);
-    }
-  };
 
-  // 商品列表 (CRUD)
+  // 商品
   // 商品表單
   const handleProductChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -105,9 +143,10 @@ function App() {
   };
   // 新增表單
   const addProduct = () => {
-    setTempProduct(defaultProduct);
     productModalRef.current.show();
+    setTempProduct(defaultProduct);
   }
+  // 修改
   const EditProduct = (product) => {
     setTempProduct(product);
     productModalRef.current.show();
@@ -116,89 +155,15 @@ function App() {
   return (
     <>
       {isAuth ? (
-        <div>
           <div className="container">
+            <h2>產品列表</h2>
             <div className="text-end mt-4">
               <button className="btn btn-primary" onClick={addProduct}>建立新的產品</button>
             </div>
-            <table className="table mt-4">
-              <thead>
-                <tr>
-                  <th width="120">分類</th>
-                  <th>產品名稱</th>
-                  <th width="120">原價</th>
-                  <th width="120">售價</th>
-                  <th width="100">是否啟用</th>
-                  <th width="120">編輯</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td></td>
-                  <td></td>
-                  <td className="text-end"></td>
-                  <td className="text-end"></td>
-                  <td>
-                    <span className="text-success">啟用</span>
-                    <span>未啟用</span>
-                  </td>
-                  <td>
-                    <div className="btn-group">
-                      <button type="button" className="btn btn-outline-primary btn-sm">
-                        編輯
-                      </button>
-                      <button type="button" className="btn btn-outline-danger btn-sm">
-                        刪除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <Products products={products} addProduct={addProduct}/>
           </div>
-        </div>
       ) : (
-        <div className="container login">
-          <div className="row justify-content-center">
-            <h1 className="h3 mb-3 font-weight-normal">請先登入</h1>
-            <div className="col-8">
-              <form id="form" className="form-signin" onSubmit={handleSubmit}>
-                <div className="form-floating mb-3">
-                  <input
-                    type="email"
-                    className="form-control"
-                    id="username"
-                    placeholder="name@example.com"
-                    value={formData.username}
-                    onChange={handleInputChange}
-                    required
-                    autoFocus
-                    />
-                  <label htmlFor="username">Email address</label>
-                </div>
-                <div className="form-floating">
-                  <input
-                    type="password"
-                    className="form-control"
-                    id="password"
-                    placeholder="Password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    required
-                    />
-                  <label htmlFor="password">Password</label>
-                </div>
-                <button
-                  className="btn btn-lg btn-primary w-100 mt-3"
-                  type="submit"
-                  >
-                  登入
-                </button>
-              </form>
-            </div>
-          </div>
-          <p className="mt-5 mb-3 text-muted">&copy; 2024~∞ - 六角學院</p>
-        </div>
+        <LoginForm user={formData} handleLogin={handleLogin} handleInputChange={handleInputChange} />
       )}
       <div
         id="productModal"
@@ -206,6 +171,7 @@ function App() {
         tabIndex="-1"
         aria-labelledby="productModalLabel"
         aria-hidden="true"
+        ref={productModalRef}
         >
         <div className="modal-dialog modal-xl">
           <div className="modal-content border-0">
@@ -352,6 +318,7 @@ function App() {
                         type="checkbox"
                         name='is_enabled'
                         value={tempProduct.is_enabled}
+                        checked={!!tempProduct.is_enabled}
                         onChange={handleProductChange}
                         />
                       <label className="form-check-label" htmlFor="is_enabled">
